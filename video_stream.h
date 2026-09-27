@@ -70,10 +70,14 @@ static void videoHandleFrame() {
     videoActive = true;
     videoFrames = 0;
     videoWindowStart = millis();
-    lcd.fillScreen(TFT_BLACK);
     Serial.println("video start");
   }
-  bool ok = lcd.drawJpg(videoFrame, videoFrameLen, 0, 0, lcd.width(), lcd.height(), 0, 0, zoom, zoom);
+  beginDraw();
+  sprite.fillScreen(TFT_BLACK);
+  // At half resolution the panel buffer is 400x240, so draw frames at half size.
+  float scale = displayHalf ? zoom * 0.5f : zoom;
+  bool ok = sprite.drawJpg(videoFrame, videoFrameLen, 0, 0, displayW, displayH, 0, 0, scale, scale);
+  presentFrame();
   videoLastFrameMs = millis();
   videoFrames++;
   if (videoLastFrameMs - videoWindowStart >= 2000) {
@@ -199,12 +203,19 @@ static void videoSetup() {
   });
   videoServer.on("/settings", HTTP_GET, []() {
     videoServer.send(200, "application/json", String("{\"hologram\":") + (holoMode ? "true" : "false") +
-                                                  ",\"rotate\":" + (holoRotate ? "true" : "false") + "}");
+                                                  ",\"rotate\":" + (holoRotate ? "true" : "false") +
+                                                  ",\"magic\":" + (magicOn ? "true" : "false") +
+                                                  ",\"half\":" + (halfRes ? "true" : "false") +
+                                                  ",\"lite\":" + (useLiteModels ? "true" : "false") + "}");
   });
   videoServer.on("/settings", HTTP_POST, []() {
     bool on = videoServer.hasArg("hologram") ? videoServer.arg("hologram") == "1" : holoMode;
     bool rotate = videoServer.hasArg("rotate") ? videoServer.arg("rotate") == "1" : holoRotate;
     setHologram(on, rotate);
+    if (videoServer.hasArg("magic")) setMagic(videoServer.arg("magic") == "1");
+    if (videoServer.hasArg("half")) setHalfRes(videoServer.arg("half") == "1");
+    if (videoServer.hasArg("lite") && (videoServer.arg("lite") == "1") != useLiteModels)
+      setLiteModels(videoServer.arg("lite") == "1");
     videoServer.send(204);
   });
   videoServer.on("/restart", HTTP_POST, []() {

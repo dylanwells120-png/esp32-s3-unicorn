@@ -12,7 +12,10 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 # Copied to the SD card by tools/sd_upload.py.
 MODELS = ROOT / "sd" / "unicorn" / "animals.bin"
-MODEL_VERSION = 1
+MODELS_LITE = ROOT / "sd" / "unicorn" / "animals_lite.bin"
+MODEL_VERSION = 2
+# Scales how many sides tubes and spheres get; the lite models use less.
+DETAIL = 1.0
 NAME_BYTES = 16
 PREVIEW_DIR = Path("/tmp/unicorn_preview")
 
@@ -63,10 +66,25 @@ class Mesh:
         self.verts = []
         self.tris = []  # a, b, c, r, g, b, flags
         self.rng = random.Random(seed)
+        # Moving parts: vertices added after animate() belong to that part and
+        # swing about its pivot on the device. Part 0 never moves.
+        self.parts = []  # (pivot, axis 0-2, amplitude degrees, cycles per second, phase in turns)
+        self.part = 0
+        self.vpart = []
 
     def add_vert(self, p):
         self.verts.append(np.asarray(p, dtype=np.float32).copy())
+        self.vpart.append(self.part)
         return len(self.verts) - 1
+
+    def animate(self, pivot, axis, degrees, hz, phase=0.0):
+        """Start a moving part: angle = degrees * sin(2 pi (hz t + phase)) about `axis` ('x', 'y' or 'z') through `pivot`."""
+        self.parts.append((np.asarray(pivot, dtype=np.float32).copy(), "xyz".index(axis), degrees, hz, phase))
+        self.part = len(self.parts)
+        return self.part
+
+    def still(self):
+        self.part = 0
 
     def add_tri(self, ia, ib, ic, color, inside=None, flags=0, paint=None):
         """`inside` is a point behind the face; the winding is flipped so the normal points away from it."""
@@ -101,6 +119,7 @@ def loft(mesh, points, radii, colors, sides=8, cap=(True, True), bulge=(0.0, 0.0
          flags=0, paint=None, up=None):
     """Tube through `points` with elliptical rings (rx, ry) framed by parallel transport."""
     points = [np.asarray(p, dtype=np.float32) for p in points]
+    sides = max(3, round(sides * DETAIL))
     if not isinstance(colors, list):
         colors = [colors]
     if isinstance(cap, bool):
@@ -153,6 +172,8 @@ def loft(mesh, points, radii, colors, sides=8, cap=(True, True), bulge=(0.0, 0.0
 
 def ellipsoid(mesh, center, radii, color, lat=6, lon=10, rot=None, flags=0, paint=None):
     center = np.asarray(center, dtype=np.float32)
+    lat = max(2, round(lat * DETAIL))
+    lon = max(4, round(lon * DETAIL))
     rot = np.eye(3, dtype=np.float32) if rot is None else rot
     rx, ry, rz = radii
 
@@ -229,6 +250,9 @@ def settle(mesh, shadow=None):
     shift = v3(-(lo[0] + hi[0]) * 0.5, 0.02 - lo[1], -(lo[2] + hi[2]) * 0.5)
     for p in mesh.verts:
         p += shift
+    for part in mesh.parts:
+        part[0][:] += shift
+    mesh.still()
     if shadow:
         ground_shadow(mesh, *shadow)
     return mesh
@@ -281,6 +305,8 @@ def build_unicorn():
     neck = [v3(0, 1.20, 0.52), v3(0, 1.48, 0.70), v3(0, 1.74, 0.84), v3(0, 1.94, 0.92)]
     loft(mesh, neck, [(0.21, 0.29), (0.16, 0.22), (0.135, 0.18), (0.125, 0.15)], COAT, sides=10, cap=False)
 
+    # Head, eyes, ears and horn nod together, twice per stride.
+    head_part = mesh.animate(v3(0, 1.90, 0.88), "x", 5, 2.0)
     head = [v3(0, 2.02, 0.86), v3(0, 1.99, 0.97), v3(0, 1.89, 1.11), v3(0, 1.77, 1.25), v3(0, 1.66, 1.37),
             v3(0, 1.60, 1.44)]
     loft(mesh, head, [(0.10, 0.10), (0.155, 0.165), (0.145, 0.155), (0.115, 0.12), (0.105, 0.10), (0.085, 0.075)],
@@ -304,6 +330,7 @@ def build_unicorn():
     loft(mesh, horn_pts, horn_r, [HORN_A if i % 2 == 0 else HORN_B for i in range(segs)], sides=6,
          twist=0.6, flags=FLAG_SPECULAR, bulge=(0.0, 0.8))
 
+    mesh.still()
     # Mane: rainbow locks that fall alternately to each side of the crest.
     crest = [v3(0, 2.06, 0.84), v3(0, 1.90, 0.76), v3(0, 1.72, 0.66), v3(0, 1.54, 0.56), v3(0, 1.38, 0.46)]
     locks = 12
@@ -323,12 +350,14 @@ def build_unicorn():
         loft(mesh, pts, [(0.06, 0.05), (0.08, 0.06), (0.07, 0.05), (0.045, 0.035), (0.006, 0.006)],
              RAINBOW[k % len(RAINBOW)], sides=5, bulge=(0.4, 0.0))
     # Forelock between the ears.
+    mesh.part = head_part
     loft(mesh, [v3(0, 2.10, 0.90), v3(0.02, 2.08, 1.00), v3(0.05, 2.00, 1.08), v3(0.07, 1.92, 1.10)],
          [(0.05, 0.045), (0.055, 0.045), (0.04, 0.03), (0.006, 0.006)], RAINBOW[0], sides=5, bulge=(0.4, 0.0))
 
     # Tail: several flowing strands.
     # Tail: strands arch up off the rump, then fall and fan out.
     root = v3(0, 1.30, -0.96)
+    mesh.animate(root, "y", 14, 1.0)
     for k, dx in enumerate((-0.09, -0.045, 0.0, 0.045, 0.09)):
         sway = 0.05 * math.sin(k * 2.1)
         pts = [
@@ -345,8 +374,10 @@ def build_unicorn():
              RAINBOW[(k * 2 + 1) % len(RAINBOW)], sides=6, bulge=(0.3, 0.0))
 
     # Legs. The near foreleg is lifted mid-prance.
+    # Walking gait: diagonal pairs swing together at the hips.
     for sx in (-1.0, 1.0):
         x = sx * 0.19
+        mesh.animate(v3(x, 1.00, 0.52), "x", 16, 1.0, 0.0 if sx > 0 else 0.5)
         if sx > 0:
             shoulder = v3(x, 1.00, 0.52)
             knee = shoulder + v3(0, -0.23, 0.32)
@@ -360,6 +391,7 @@ def build_unicorn():
                                v3(x, 0.14, 0.57), v3(x, 0.08, 0.59), v3(x, 0.00, 0.60)],
                         [(0.12, 0.13), (0.085, 0.095), (0.064, 0.07), (0.054, 0.056), (0.062, 0.064), (0.062, 0.062),
                          (0.072, 0.072)])
+        mesh.animate(v3(x, 1.04, -0.62), "x", 16, 1.0, 0.5 if sx > 0 else 0.0)
         unicorn_leg(mesh, [v3(x, 1.04, -0.62), v3(x * 1.02, 0.74, -0.52), v3(x, 0.44, -0.72), v3(x, 0.28, -0.70),
                            v3(x, 0.14, -0.67), v3(x, 0.08, -0.65), v3(x, 0.00, -0.64)],
                     [(0.15, 0.17), (0.10, 0.13), (0.068, 0.072), (0.054, 0.056), (0.062, 0.064), (0.062, 0.062),
@@ -410,6 +442,7 @@ def build_fox():
             return FOX_CREAM
         return col
 
+    mesh.animate(v3(0, 0.80, 0.50), "x", 5, 2.8)
     ellipsoid(mesh, v3(0, 0.91, 0.62), (0.135, 0.115, 0.125), FOX, lat=6, lon=12, paint=face)
     # Cheek ruffs.
     for sx in (-1.0, 1.0):
@@ -444,19 +477,22 @@ def build_fox():
              [(0.056, 0.022), (0.044, 0.02), (0.026, 0.014), (0.004, 0.004)], [FOX, FOX, FOX_BLACK], sides=6,
              paint=ear_paint, up=v3(0, 0, 1))
 
-    # Legs with black socks.
+    # Legs with black socks, trotting in diagonal pairs.
     for sx in (-1.0, 1.0):
         x = sx * 0.10
+        mesh.animate(v3(x, 0.60, 0.28), "x", 22, 1.4, 0.0 if sx > 0 else 0.5)
         loft(mesh, [v3(x, 0.60, 0.28), v3(x, 0.40, 0.30), v3(x, 0.22, 0.31), v3(x, 0.07, 0.31), v3(x, 0.03, 0.34),
                     v3(x, 0.0, 0.37)],
              [(0.07, 0.08), (0.045, 0.05), (0.035, 0.038), (0.032, 0.034), (0.038, 0.036), (0.034, 0.03)],
              [FOX, FOX_DARK, FOX_BLACK, FOX_BLACK, FOX_BLACK], sides=7, bulge=(0.3, 0.3))
+        mesh.animate(v3(x, 0.62, -0.36), "x", 22, 1.4, 0.5 if sx > 0 else 0.0)
         loft(mesh, [v3(x, 0.62, -0.36), v3(x * 1.05, 0.40, -0.28), v3(x, 0.22, -0.42), v3(x, 0.07, -0.40),
                     v3(x, 0.03, -0.37), v3(x, 0.0, -0.34)],
              [(0.10, 0.12), (0.065, 0.075), (0.036, 0.04), (0.032, 0.034), (0.038, 0.036), (0.034, 0.03)],
              [FOX, FOX_DARK, FOX_BLACK, FOX_BLACK, FOX_BLACK], sides=7, bulge=(0.3, 0.3))
 
     # Bushy tail with a white tip.
+    mesh.animate(v3(0, 0.66, -0.48), "y", 18, 0.9)
     tail = [v3(0, 0.66, -0.48), v3(0, 0.58, -0.64), v3(0.02, 0.46, -0.82), v3(0.05, 0.37, -1.00),
             v3(0.08, 0.33, -1.14), v3(0.10, 0.34, -1.24), v3(0.11, 0.37, -1.30)]
     loft(mesh, tail, [(0.06, 0.06), (0.10, 0.10), (0.15, 0.14), (0.16, 0.15), (0.13, 0.12), (0.08, 0.07), (0.01, 0.01)],
@@ -505,6 +541,7 @@ def build_penguin():
         (1.43, 0.03, 0.17, 0.16),
         (1.51, 0.01, 0.07, 0.07),
     ]
+    body_part = mesh.animate(v3(0, 0, 0), "z", 5, 0.8)
     loft(mesh, [v3(0, y, z) for y, z, _, _ in body], [(rx, rz) for _, _, rx, rz in body], PEN_BLACK, sides=18,
          bulge=(0.2, 0.5), paint=coat, up=v3(0, 0, 1))
 
@@ -517,16 +554,19 @@ def build_penguin():
         def flipper(c, n, col, sx=sx):
             return PEN_WHITE if n[0] * sx < -0.5 else col
 
+        mesh.animate(v3(sx * 0.24, 1.00, 0.0), "z", 14, 1.6, 0.0 if sx > 0 else 0.5)
         loft(mesh, [v3(sx * 0.24, 1.00, 0.00), v3(sx * 0.33, 0.82, 0.02), v3(sx * 0.39, 0.58, 0.06),
                     v3(sx * 0.41, 0.44, 0.09)],
              [(0.04, 0.10), (0.035, 0.11), (0.025, 0.08), (0.006, 0.02)], PEN_BLACK, sides=6, paint=flipper,
              up=v3(0, 0, 1))
         # Webbed feet: three toes.
+        mesh.still()
         for k, spread in enumerate((-0.35, 0.0, 0.35)):
             d = v3(math.sin(spread + sx * 0.25), 0, math.cos(spread + sx * 0.25))
             start = v3(sx * 0.12, 0.045, 0.10)
             loft(mesh, [start, start + d * 0.10 + v3(0, -0.01, 0), start + d * 0.17 + v3(0, -0.02, 0)],
                  [(0.035, 0.025), (0.03, 0.02), (0.012, 0.01)], PEN_ORANGE, sides=5)
+    mesh.part = body_part
     loft(mesh, [v3(0, 0.16, -0.22), v3(0, 0.08, -0.34), v3(0, 0.04, -0.40)], [(0.10, 0.03), (0.07, 0.02), (0.01, 0.005)],
          PEN_BLACK, sides=5, up=v3(0, 1, 0))
 
@@ -600,7 +640,8 @@ def build_turtle():
     def skin(c_, n, col):
         return SKIN_LIGHT if n[1] < -0.35 else col
 
-    # Neck and head, peeking out and slightly raised.
+    # Neck and head, peeking out and slightly raised, bobbing slowly.
+    mesh.animate(v3(0, 0.26, 0.42), "x", 8, 0.6)
     loft(mesh, [v3(0, 0.24, 0.40), v3(0, 0.30, 0.58), v3(0, 0.36, 0.70)], [(0.10, 0.09), (0.085, 0.08), (0.08, 0.075)],
          SKIN, sides=9, cap=False, paint=skin)
     ellipsoid(mesh, v3(0, 0.39, 0.76), (0.115, 0.10, 0.13), SKIN, lat=6, lon=10, paint=skin)
@@ -613,6 +654,7 @@ def build_turtle():
         for sz in (-1.0, 1.0):
             hip = v3(sx * 0.32, 0.24, sz * 0.36)
             foot = v3(sx * 0.44, 0.0, sz * 0.46)
+            mesh.animate(hip, "y", 18, 0.9, 0.0 if sx * sz > 0 else 0.5)
             loft(mesh, [hip, hip + (foot - hip) * 0.55, foot + v3(0, 0.03, 0), foot],
                  [(0.10, 0.09), (0.085, 0.08), (0.095, 0.09), (0.09, 0.085)], SKIN, sides=8, paint=skin)
             fwd = vnorm(v3(sx * 0.3, 0, sz))
@@ -620,6 +662,7 @@ def build_turtle():
             for k in (-1, 0, 1):
                 ellipsoid(mesh, foot + fwd * 0.085 + side * (k * 0.04) + v3(0, 0.02, 0), (0.016, 0.014, 0.022),
                           (236, 226, 196), lat=2, lon=5, rot=look_rot(fwd))
+    mesh.still()
     loft(mesh, [v3(0, 0.22, -0.56), v3(0, 0.18, -0.66), v3(0.03, 0.13, -0.76)], [(0.05, 0.04), (0.035, 0.03), (0.005, 0.005)],
          SKIN, sides=6)
 
@@ -679,8 +722,11 @@ def build_owl():
             return OWL_DARK
         return col
 
+    # The head slowly turns to look around.
+    head_part = mesh.animate(v3(0, 1.05, 0.0), "y", 40, 0.18)
     ellipsoid(mesh, v3(0, 1.20, 0.02), (0.31, 0.27, 0.27), OWL, lat=7, lon=14, paint=head_paint)
     for sx in (-1.0, 1.0):
+        mesh.part = head_part
         # Facial disc around each eye.
         ellipsoid(mesh, v3(sx * 0.115, 1.19, 0.20), (0.13, 0.14, 0.06), OWL_FACE, lat=4, lon=10,
                   rot=rot_matrix(yaw=sx * 22))
@@ -696,21 +742,25 @@ def build_owl():
         def wing(c, n, col):
             return OWL_LIGHT if int(float(c[1]) * 11) % 3 == 0 else col
 
+        mesh.animate(v3(sx * 0.25, 1.00, 0.0), "z", 6, 0.9, 0.0 if sx > 0 else 0.5)
         loft(mesh, [v3(sx * 0.25, 1.00, 0.0), v3(sx * 0.32, 0.78, -0.02), v3(sx * 0.31, 0.50, -0.06),
                     v3(sx * 0.22, 0.26, -0.14), v3(sx * 0.12, 0.12, -0.22)],
              [(0.06, 0.16), (0.07, 0.20), (0.065, 0.20), (0.05, 0.14), (0.01, 0.03)], OWL_DARK, sides=6, paint=wing,
              bulge=(0.5, 0.0), up=v3(0, 0, 1))
 
         # Talons curled over the branch.
+        mesh.still()
         for k in (-1, 0, 1):
             x = sx * 0.10 + k * 0.035
             loft(mesh, [v3(x, 0.22, 0.02), v3(x, 0.19, 0.08), v3(x, 0.15, 0.10), v3(x, 0.10, 0.10)],
                  [(0.022, 0.022), (0.02, 0.02), (0.016, 0.016), (0.004, 0.004)], [OWL_GOLD, OWL_GOLD, (40, 34, 30)],
                  sides=5)
     # Hooked beak.
+    mesh.part = head_part
     loft(mesh, [v3(0, 1.17, 0.27), v3(0, 1.14, 0.32), v3(0, 1.08, 0.33)], [(0.032, 0.028), (0.02, 0.018), (0.004, 0.004)],
          (84, 76, 70), sides=6, flags=FLAG_SPECULAR)
     # Tail feathers.
+    mesh.still()
     loft(mesh, [v3(0, 0.34, -0.22), v3(0, 0.16, -0.32), v3(0, 0.02, -0.36)], [(0.12, 0.03), (0.11, 0.025), (0.06, 0.012)],
          OWL_DARK, sides=6, up=v3(0, 0, -1))
 
@@ -839,7 +889,7 @@ def frame(mesh):
     return Camera(target, focal)
 
 
-def write_models(entries):
+def write_models(entries, path=None):
     """entries: list of (label, mesh, camera). Layout is read by loadAnimals() in sd_store.h."""
     out = bytearray(b"ANIM")
     out += struct.pack("<HH", MODEL_VERSION, len(entries))
@@ -848,13 +898,18 @@ def write_models(entries):
         out += name.ljust(NAME_BYTES, b"\0")
         out += struct.pack("<7f", cam.focal, *(float(v) for v in cam.pos), *(float(v) for v in cam.target))
         out += struct.pack("<II", len(mesh.verts), len(mesh.tris))
+        out += struct.pack("<B", len(mesh.parts))
+        for pivot, axis, degrees, hz, phase in mesh.parts:
+            out += struct.pack("<3fB3f", *(float(v) for v in pivot), axis, math.radians(degrees), hz, phase)
         for p in mesh.verts:
             out += struct.pack("<3f", float(p[0]), float(p[1]), float(p[2]))
         for tri in mesh.tris:
             out += struct.pack("<3H4B", *tri)
-    MODELS.parent.mkdir(parents=True, exist_ok=True)
-    MODELS.write_bytes(bytes(out))
-    print(f"wrote {MODELS} animals={len(entries)} bytes={len(out)}")
+        out += bytes(mesh.vpart)
+    path = path or MODELS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(out))
+    print(f"wrote {path} animals={len(entries)} bytes={len(out)}")
 
 
 ANIMALS = (
@@ -886,6 +941,16 @@ def main():
     sheet.save(PREVIEW_DIR / "sheet.png")
     print(f"wrote {PREVIEW_DIR / 'sheet.png'}")
     write_models(built)
+
+    # Lite set: same shapes with fewer sides, reusing each full model's camera.
+    global DETAIL
+    DETAIL = 0.6
+    lite = []
+    for (symbol, label, maker), (_, full, cam) in zip(ANIMALS, built):
+        mesh = maker()
+        print(f"{label} lite tris={len(mesh.tris)} (full {len(full.tris)})")
+        lite.append((label, mesh, cam))
+    write_models(lite, MODELS_LITE)
 
 
 if __name__ == "__main__":

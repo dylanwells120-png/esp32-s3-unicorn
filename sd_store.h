@@ -21,11 +21,15 @@ static constexpr int kSdMiso = 13;
 
 static constexpr const char *kSdDir = "/unicorn";
 static constexpr const char *kModelsPath = "/unicorn/animals.bin";
+static constexpr const char *kLiteModelsPath = "/unicorn/animals_lite.bin";
+// Load the lighter models, with fewer triangles (see liteModels in the sketch).
+static bool useLiteModels = false;
 static constexpr const char *kPagePath = "/unicorn/index.html";
 static constexpr const char *kFirmwarePath = "/unicorn/firmware.bin";
 static constexpr const char *kFirmwareDonePath = "/unicorn/firmware.done";
 static constexpr const char *kFirmwareBadPath = "/unicorn/firmware.bad";
-static constexpr uint16_t kModelVersion = 1;
+// Version 2 adds moving parts; version 1 files still load, without animation.
+static constexpr uint16_t kModelVersion = 2;
 
 static bool sdReady = false;
 static AnimalMesh animals[kMaxAnimals];
@@ -45,10 +49,14 @@ static bool startSd() {
   return true;
 }
 
+static void forgetFastAnimal();
+
 static void freeAnimals() {
+  forgetFastAnimal();
   for (int i = 0; i < animalCount; ++i) {
     heap_caps_free((void *)animals[i].vertices);
     heap_caps_free((void *)animals[i].triangles);
+    heap_caps_free((void *)animals[i].vertexParts);
   }
   memset(animals, 0, sizeof(animals));
   animalCount = 0;
@@ -66,7 +74,8 @@ static bool loadAnimals() {
     modelError = "no SD card";
     return false;
   }
-  File f = SD.open(kModelsPath, FILE_READ);
+  const char *path = useLiteModels && SD.exists(kLiteModelsPath) ? kLiteModelsPath : kModelsPath;
+  File f = SD.open(path, FILE_READ);
   if (!f) {
     modelError = "animals.bin missing";
     Serial.println("models: /unicorn/animals.bin missing");
@@ -76,7 +85,7 @@ static bool loadAnimals() {
   uint16_t version = 0;
   uint16_t count = 0;
   bool ok = readExact(f, magic, 4) && memcmp(magic, "ANIM", 4) == 0 && readExact(f, &version, 2) &&
-            version == kModelVersion && readExact(f, &count, 2);
+            (version == 1 || version == kModelVersion) && readExact(f, &count, 2);
   if (!ok) {
     f.close();
     modelError = "animals.bin is not a model file";
@@ -100,6 +109,19 @@ static bool loadAnimals() {
     m.targetX = cam[4];
     m.targetY = cam[5];
     m.targetZ = cam[6];
+    m.partCount = 0;
+    m.vertexParts = nullptr;
+    if (version >= 2) {
+      uint8_t parts = 0;
+      ok = readExact(f, &parts, 1) && parts <= kMaxParts;
+      for (int p = 0; ok && p < parts; ++p) {
+        AnimalPart &part = m.parts[p];
+        ok = readExact(f, part.pivot, 12) && readExact(f, &part.axis, 1) && readExact(f, &part.amplitude, 4) &&
+             readExact(f, &part.hz, 4) && readExact(f, &part.phase, 4) && part.axis < 3;
+      }
+      if (!ok) break;
+      m.partCount = parts;
+    }
     AnimalVertex *v = (AnimalVertex *)heap_caps_malloc(verts * sizeof(AnimalVertex), MALLOC_CAP_SPIRAM);
     AnimalTriangle *t = (AnimalTriangle *)heap_caps_malloc(tris * sizeof(AnimalTriangle), MALLOC_CAP_SPIRAM);
     m.vertices = v;
@@ -109,6 +131,14 @@ static bool loadAnimals() {
     if (!ok) break;
     for (uint32_t k = 0; k < tris; ++k) {
       if (t[k].a >= verts || t[k].b >= verts || t[k].c >= verts) ok = false;
+    }
+    if (ok && version >= 2) {
+      uint8_t *vp = (uint8_t *)heap_caps_malloc(verts, MALLOC_CAP_SPIRAM);
+      ok = vp && readExact(f, vp, verts);
+      for (uint32_t k = 0; ok && k < verts; ++k) {
+        if (vp[k] > m.partCount) ok = false;
+      }
+      m.vertexParts = vp;
     }
     m.vertexCount = (int)verts;
     m.triangleCount = (int)tris;
@@ -180,7 +210,7 @@ static void installFirmwareFromSd(void (*progress)(int percent, const char *stat
 // Uploads. Only these names may be written, always inside /unicorn.
 
 static bool sdPathFor(const String &name, String &path) {
-  if (name != "animals.bin" && name != "index.html" && name != "firmware.bin") return false;
+  if (name != "animals.bin" && name != "animals_lite.bin" && name != "index.html" && name != "firmware.bin") return false;
   path = String(kSdDir) + "/" + name;
   return true;
 }

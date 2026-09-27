@@ -5,3 +5,4 @@ build/
 wifi_secrets.h
 !sd/unicorn/animals.bin
 *.blend1
+!sd/unicorn/animals_lite.bin

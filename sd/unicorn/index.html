@@ -41,9 +41,12 @@
   <header><h1>Unicorn Display</h1><a href="/setup">SD card</a></header>
 
   <h2>Hologram box</h2>
-  <p class="sub">Turn this on when the board is in the Pepper's ghost box. The picture is mirrored to undo the reflection, and the on-screen buttons are hidden. If the animal looks upside down, press Rotate 180°.</p>
+  <p class="sub">Turn this on when the board is in the Pepper's ghost box. The picture is mirrored to undo the reflection, and the on-screen buttons are hidden. If the animal looks upside down, press Rotate 180°. Magic effects add glowing comets, sparkles and a ring of light, themed for each animal.</p>
   <div class="row">
     <label class="switch"><input type="checkbox" id="holo"> Hologram mode</label>
+    <label class="switch"><input type="checkbox" id="magic"> Magic effects</label>
+    <label class="switch"><input type="checkbox" id="half"> Half resolution (60 fps)</label>
+    <label class="switch"><input type="checkbox" id="lite"> Lite models</label>
     <button class="main stop" id="rotate" disabled>Rotate 180°</button>
     <span class="stats" id="holoMsg"></span>
   </div>
@@ -74,22 +77,32 @@
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------- Hologram
-let holo = { hologram: false, rotate: false };
+let holo = { hologram: false, rotate: false, magic: true, half: false, lite: false };
+
+function showHolo() {
+  $("holo").checked = holo.hologram;
+  $("magic").checked = holo.magic;
+  $("half").checked = holo.half;
+  $("lite").checked = holo.lite;
+  $("rotate").disabled = !holo.hologram;
+  $("magic").disabled = !holo.hologram;
+}
 
 async function saveHolo(next) {
-  const r = await fetch(`/settings?hologram=${next.hologram ? 1 : 0}&rotate=${next.rotate ? 1 : 0}`, { method: "POST" }).catch(() => null);
-  if (!r || !r.ok) { $("holoMsg").textContent = "The board didn't respond."; $("holo").checked = holo.hologram; return; }
+  const q = `hologram=${next.hologram ? 1 : 0}&rotate=${next.rotate ? 1 : 0}&magic=${next.magic ? 1 : 0}` +
+    `&half=${next.half ? 1 : 0}&lite=${next.lite ? 1 : 0}`;
+  const r = await fetch("/settings?" + q, { method: "POST" }).catch(() => null);
+  if (!r || !r.ok) { $("holoMsg").textContent = "The board didn't respond."; showHolo(); return; }
   holo = next;
-  $("rotate").disabled = !holo.hologram;
-  $("holoMsg").textContent = holo.hologram ? (holo.rotate ? "On, rotated." : "On.") : "Off.";
+  showHolo();
+  $("holoMsg").textContent = !holo.hologram ? "Off." : [holo.rotate ? "On, rotated" : "On", holo.magic ? "with magic." : "without effects."].join(", ");
 }
 $("holo").onchange = () => saveHolo({ ...holo, hologram: $("holo").checked });
+$("magic").onchange = () => saveHolo({ ...holo, magic: $("magic").checked });
+$("half").onchange = () => saveHolo({ ...holo, half: $("half").checked });
+$("lite").onchange = () => saveHolo({ ...holo, lite: $("lite").checked });
 $("rotate").onclick = () => saveHolo({ ...holo, rotate: !holo.rotate });
-fetch("/settings").then((r) => r.json()).then((s) => {
-  holo = s;
-  $("holo").checked = s.hologram;
-  $("rotate").disabled = !s.hologram;
-}).catch(() => {});
+fetch("/settings").then((r) => r.json()).then((s) => { holo = { ...holo, ...s }; showHolo(); }).catch(() => {});
 
 // ---------------------------------------------------------------- 3D viewer
 // Mirrors the renderer in the sketch: same file, camera, lights and shading.
@@ -103,13 +116,24 @@ function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
 function parseModels(buf) {
   const dv = new DataView(buf);
-  if (new TextDecoder().decode(new Uint8Array(buf, 0, 4)) !== "ANIM" || dv.getUint16(4, true) !== 1) throw new Error("not a model file");
+  const version = dv.getUint16(4, true);
+  if (new TextDecoder().decode(new Uint8Array(buf, 0, 4)) !== "ANIM" || version < 1 || version > 2) throw new Error("not a model file");
   const count = dv.getUint16(6, true), out = [];
   let o = 8;
   for (let i = 0; i < count; i++) {
     const name = new TextDecoder().decode(new Uint8Array(buf, o, 16)).replace(/\0.*$/s, ""); o += 16;
     const f = []; for (let k = 0; k < 7; k++, o += 4) f.push(dv.getFloat32(o, true));
     const nv = dv.getUint32(o, true), nt = dv.getUint32(o + 4, true); o += 8;
+    // Moving parts (version 2): pivot, axis, amplitude (radians), cycles per second, phase.
+    const parts = [];
+    if (version >= 2) {
+      const count = dv.getUint8(o); o += 1;
+      for (let p = 0; p < count; p++, o += 25) {
+        parts.push({ pivot: [dv.getFloat32(o, true), dv.getFloat32(o + 4, true), dv.getFloat32(o + 8, true)],
+                     axis: dv.getUint8(o + 12), amp: dv.getFloat32(o + 13, true), hz: dv.getFloat32(o + 17, true),
+                     phase: dv.getFloat32(o + 21, true) });
+      }
+    }
     const verts = new Float32Array(nv * 3);
     for (let k = 0; k < nv * 3; k++, o += 4) verts[k] = dv.getFloat32(o, true);
     const tris = [];
@@ -117,10 +141,12 @@ function parseModels(buf) {
       tris.push([dv.getUint16(o, true), dv.getUint16(o + 2, true), dv.getUint16(o + 4, true),
                  dv.getUint8(o + 6), dv.getUint8(o + 7), dv.getUint8(o + 8), dv.getUint8(o + 9)]);
     }
+    let vparts = null;
+    if (version >= 2) { vparts = new Uint8Array(buf.slice(o, o + nv)); o += nv; }
     const cam = [f[1], f[2], f[3]], target = [f[4], f[5], f[6]];
     const fwd = norm([target[0] - cam[0], target[1] - cam[1], target[2] - cam[2]]);
     const right = norm(cross(fwd, [0, 1, 0])), up = norm(cross(right, fwd));
-    out.push({ name, focal: f[0], cam, fwd, right, up, verts, tris });
+    out.push({ name, focal: f[0], cam, fwd, right, up, verts, tris, parts, vparts });
   }
   return out;
 }
@@ -141,8 +167,19 @@ function draw(now) {
   ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 800, 480);
   const yaw = (now / 1000) * (2 * Math.PI / TURN_SECONDS) + dragYaw, c = Math.cos(yaw), s = Math.sin(yaw);
   const n = m.verts.length / 3, world = new Float32Array(n * 3), scr = new Float32Array(n * 3);
+  const secs = now / 1000;
+  const swings = m.parts.map((p) => { const a = p.amp * Math.sin(2 * Math.PI * (p.hz * secs + p.phase)); return [Math.cos(a), Math.sin(a)]; });
   for (let i = 0; i < n; i++) {
-    const x = m.verts[i * 3], y = m.verts[i * 3 + 1], z = m.verts[i * 3 + 2];
+    let x = m.verts[i * 3], y = m.verts[i * 3 + 1], z = m.verts[i * 3 + 2];
+    const part = m.vparts ? m.vparts[i] : 0;
+    if (part) {
+      // Same swing as the board: rotate about the part's axis through its pivot.
+      const { pivot, axis } = m.parts[part - 1], [pc, ps] = swings[part - 1];
+      const dx = x - pivot[0], dy = y - pivot[1], dz = z - pivot[2];
+      if (axis === 0) { y = pivot[1] + pc * dy - ps * dz; z = pivot[2] + ps * dy + pc * dz; }
+      else if (axis === 1) { x = pivot[0] + pc * dx + ps * dz; z = pivot[2] - ps * dx + pc * dz; }
+      else { x = pivot[0] + pc * dx - ps * dy; y = pivot[1] + ps * dx + pc * dy; }
+    }
     const wx = c * x + s * z, wz = -s * x + c * z;
     world[i * 3] = wx; world[i * 3 + 1] = y; world[i * 3 + 2] = wz;
     const d = [wx - m.cam[0], y - m.cam[1], wz - m.cam[2]], cz = dot(d, m.fwd);

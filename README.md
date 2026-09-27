@@ -33,18 +33,22 @@ The board also hosts a web page that sends any video to the screen over Wi-Fi.
 
 The 3D models and the web app load from a microSD card, not from flash. The card holds:
 
-- `/unicorn/animals.bin`: the models, built by `tools/build_mesh.py` into `sd/unicorn/`.
+- `/unicorn/animals.bin` and `/unicorn/animals_lite.bin`: the full and lite models, built by `tools/build_mesh.py` into `sd/unicorn/`.
 - `/unicorn/index.html`: the web app (source in `sd/unicorn/`).
 - `/unicorn/firmware.bin`: optional. If it's there, the board installs it on the next boot, then renames it `firmware.done`.
 
 Copy files over Wi-Fi from the board's **SD card** page (`/setup`, built into the firmware so it works with an empty card), or use the script:
 
 ```bash
-python3 tools/sd_upload.py                                   # models + web app over Wi-Fi
+python3 tools/sd_upload.py                                   # models, lite models + web app over Wi-Fi
 python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 models page
 python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 firmware --restart
 python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --list
+python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --animal Fox
+python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --screenshot screen.png
 ```
+
+`--list` also shows the frame rate and settings. `--screenshot` saves exactly what the screen shows.
 
 Build the firmware file first with `arduino-cli compile --export-binaries`. Flash over USB once, to set up the 3 MB program partitions. After that, firmware can go through the card.
 
@@ -60,7 +64,22 @@ Build the firmware file first with `arduino-cli compile --export-binaries`. Flas
 
 The sheet leans toward you: its bottom edge is at the back, and its top edge is up at the front. The screen's light bounces off its underside toward you, and the animal appears standing at the back of the box.
 
-When the board is in the box, turn on **Hologram mode**, either on the web app or with `python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --hologram on`. It mirrors the picture to undo the reflection, hides the on-screen buttons, and skips the start screen. The setting survives restarts. If the animal appears upside down, press **Rotate 180°** (or use `--hologram rotate`). Videos streamed from the web app are mirrored the same way. Pick the animal on the web app, since the screen can't be tapped inside the box.
+When the board is in the box, turn on **Hologram mode**, either on the web app or with `python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --hologram on`. It mirrors the picture to undo the reflection, hides the on-screen buttons, and skips the start screen. The setting survives restarts. If the animal appears upside down, press **Rotate 180°** (or use `--hologram rotate`). Videos streamed from the web app are mirrored the same way. In hologram mode, **Magic effects** (on by default; switch on the web app, or `--magic on|off`) add glowing comets with trails, sparkles and a spinning ring of light on the floor, themed per animal: rainbow orbits for the unicorn, fox fire, falling snow for the penguin, bubbles for the turtle, fireflies and stars for the owl. Themes are in `magic_fx.h`.
+
+The animals are animated. Legs walk in a diagonal gait, heads nod or turn, tails swish, the penguin waddles and flaps its flippers, the turtle paddles, and the owl looks around. `tools/build_mesh.py` tags each moving part with a pivot and a swing (`Mesh.animate`). The firmware rotates those parts every frame, and the web app's 3D viewer plays the same motion.
+
+### Frame rate
+
+In hologram mode, turn on **Half resolution** (web app, or `--half on`) and **Lite models** (`--lite on`) to get 60 fps. All five animals then hold 61 fps, the panel's refresh rate, with magic effects on. Here's what makes that possible:
+
+- **Display driver:** the panel runs on ESP-IDF's `esp_lcd` driver (`display.h`) with bounce buffers, which keeps the picture from glitching while the chip renders.
+- **Half resolution:** there's no full-size frame buffer. The chip draws a 400×240 image, and the display interrupt scales it up 2× into each strip of lines just before the panel sends it, so the panel can refresh at 61 Hz.
+- **Both CPU cores:** each core draws a band of rows, and the split is rebalanced every frame.
+- **Fast maths:** the sketch is compiled with `-O2` and fast-math, which turns float helper functions into inline instructions and more than halves triangle time.
+- **Fast depth buffer:** in half-resolution mode it's 8-bit and lives in internal RAM.
+- **Lite models:** `sd/unicorn/animals_lite.bin` has about 60% of the detail. `tools/build_mesh.py` writes it next to `animals.bin`.
+
+Full resolution, used outside hologram mode, runs at about 19 fps. `python3 tools/sd_upload.py --port ... --list` shows the frame rate, how the frame time splits between the two cores, and the interrupt's CPU share. `--pclk` sets the panel's pixel clock in full-resolution mode (16 MHz gives 39 Hz). Pick the animal on the web app, since the screen can't be tapped inside the box.
 
 ## Build and flash
 
