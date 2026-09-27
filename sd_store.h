@@ -12,6 +12,7 @@
 #include <esp_heap_caps.h>
 
 #include "animals.h"
+#include "page_blob.h"
 
 // MaTouch 4.3" microSD slot.
 static constexpr int kSdCs = 10;
@@ -45,6 +46,19 @@ static bool startSd() {
     return false;
   }
   if (!SD.exists(kSdDir)) SD.mkdir(kSdDir);
+  // The running app ignored a normal upload, so replace the old small page.
+  File page = SD.open(kPagePath, FILE_READ);
+  size_t pageLen = page ? (size_t)page.size() : 0;
+  if (page) page.close();
+  if (pageLen != kPageBlobLen) {
+    File out = SD.open(kPagePath, FILE_WRITE);
+    if (out && out.write(kPageBlob, kPageBlobLen) == kPageBlobLen) {
+      Serial.printf("sd: installed web page (%u bytes)\n", (unsigned)kPageBlobLen);
+    } else {
+      Serial.println("sd: web page install failed");
+    }
+    if (out) out.close();
+  }
   Serial.printf("sd ready %llu MB\n", SD.cardSize() / (1024 * 1024));
   return true;
 }
@@ -210,6 +224,11 @@ static void installFirmwareFromSd(void (*progress)(int percent, const char *stat
 // Uploads. Only these names may be written, always inside /unicorn.
 
 static bool sdPathFor(const String &name, String &path) {
+  if (name.endsWith(".nes") && name.indexOf('/') < 0 && name.indexOf('\\') < 0 && name.length() <= 48) {
+    if (!SD.exists("/nes")) SD.mkdir("/nes");
+    path = String("/nes/") + name;
+    return true;
+  }
   if (name != "animals.bin" && name != "animals_lite.bin" && name != "index.html" && name != "firmware.bin") return false;
   path = String(kSdDir) + "/" + name;
   return true;

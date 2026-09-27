@@ -228,10 +228,6 @@ static inline bool projectPoint(const AnimalMesh &animal, float x, float y, floa
                                 float &invz);
 #include "magic_fx.h"
 
-// The shown animal's mesh, copied to internal RAM when it fits. In PSRAM it
-// shares the cache with the panel's scanout and misses constantly.
-static AnimalMesh fastAnimal;
-static void *fastMesh = nullptr;
 // Unit normal of each triangle in model space, as signed bytes (x, y, z, pad),
 // so each frame only has to turn it by the spin instead of rebuilding it.
 static int8_t *triNormals = nullptr;
@@ -257,12 +253,9 @@ static void forgetFastAnimal() {
   heap_caps_free(triNormals);
   triNormals = nullptr;
   triNormalCount = 0;
-  heap_caps_free(fastMesh);
-  fastMesh = nullptr;
-  fastAnimal.vertices = nullptr;
 }
 
-static const AnimalMesh &currentAnimal() { return fastAnimal.vertices ? fastAnimal : animals[animalIndex]; }
+static const AnimalMesh &currentAnimal() { return animals[animalIndex]; }
 
 static void cacheNormals(const AnimalMesh &m) {
   heap_caps_free(triNormals);
@@ -283,30 +276,11 @@ static void cacheNormals(const AnimalMesh &m) {
   triNormalCount = m.triangleCount;
 }
 
+// Only the normals are cached: copying the whole mesh to internal RAM didn't
+// make rendering faster, and Wi-Fi needs that RAM.
 static void cacheAnimal() {
-  heap_caps_free(triNormals);
-  triNormals = nullptr;
-  triNormalCount = 0;
-  heap_caps_free(fastMesh);
-  fastMesh = nullptr;
-  fastAnimal = animals[animalIndex];
-  size_t vbytes = fastAnimal.vertexCount * sizeof(AnimalVertex);
-  size_t tbytes = fastAnimal.triangleCount * sizeof(AnimalTriangle);
-  size_t pbytes = fastAnimal.vertexParts ? fastAnimal.vertexCount : 0;
-  fastMesh = heap_caps_malloc(vbytes + tbytes + pbytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (!fastMesh) {
-    fastAnimal.vertices = nullptr;
-    return;
-  }
-  memcpy(fastMesh, animals[animalIndex].vertices, vbytes);
-  memcpy((uint8_t *)fastMesh + vbytes, animals[animalIndex].triangles, tbytes);
-  fastAnimal.vertices = (const AnimalVertex *)fastMesh;
-  fastAnimal.triangles = (const AnimalTriangle *)((uint8_t *)fastMesh + vbytes);
-  if (pbytes) {
-    memcpy((uint8_t *)fastMesh + vbytes + tbytes, animals[animalIndex].vertexParts, pbytes);
-    fastAnimal.vertexParts = (const uint8_t *)fastMesh + vbytes + tbytes;
-  }
-  cacheNormals(fastAnimal);
+  forgetFastAnimal();
+  cacheNormals(animals[animalIndex]);
 }
 
 static void setupCamera() {
@@ -1015,6 +989,11 @@ void loop() {
   serialUploadPoll();
   if (videoPoll()) {
     invalidateFrames();
+    return;
+  }
+  if (nesPoll()) {
+    invalidateFrames();
+    delay(16);
     return;
   }
   handleTouch();
