@@ -2,3 +2,6 @@
 build/
 *.bin
 *.elf
+wifi_secrets.h
+!sd/unicorn/animals.bin
+*.blend1

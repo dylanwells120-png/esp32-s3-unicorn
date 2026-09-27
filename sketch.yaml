@@ -1,2 +1,2 @@
-default_fqbn: esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,CDCOnBoot=default,FlashMode=qio,UploadSpeed=921600
-default_port: /dev/cu.usbserial-011162BB
+default_fqbn: esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,CDCOnBoot=default,FlashMode=qio,UploadSpeed=921600,PartitionScheme=app3M_fat9M_16MB
+default_port: /dev/cu.usbmodem1101
