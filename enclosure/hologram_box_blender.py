@@ -29,28 +29,35 @@ IN = 25.4
 OUT = Path(__file__).resolve().parent
 
 # --- Parts you supply ------------------------------------------------------
-BOARD_W = 3.75 * IN      # screen/board edge that runs left to right (USB-C edge)
-BOARD_D = 3.125 * IN     # edge that runs front to back (SD card edge)
+BOARD_W = 105.0          # screen/board edge that runs left to right (USB-C edge)
+BOARD_D = 70.0           # edge that runs front to back (SD card edge)
 BOARD_T = 12.0           # glass top to lowest part underneath. Measure this!
-GLASS_W = 4.0 * IN       # polycarbonate sheet, left to right
-GLASS_L = 2.75 * IN      # polycarbonate sheet, along the 45 degree slope
+VISIBLE_W = 95.0         # lit picture, left to right
+VISIBLE_D = 55.0         # lit picture, front to back, centered on the board
+GLASS_W = 101.0          # Lexan sheet, left to right
+GLASS_L = 70.0           # Lexan sheet, along the 45 degree slope
 GLASS_T = 2.0            # sheet thickness; the grooves are this + GLASS_PLAY
 
 # --- Fit -------------------------------------------------------------------
-FIT = 0.5                # gap around the board on each side
-GLASS_PLAY = 0.5         # extra groove width so the sheet slides in
-GROOVE_DEPTH = 2.2       # how far the sheet sits into each side wall
-SCREEN_LIP = 2.5         # hood plate overlap onto the board edge, holds it down
+# Measured parts: screen/board 105 x 70 mm, Lexan 101 x 70 mm.
+# The extra room is so a slightly fat print or a slightly large sheet still goes in.
+FIT = 1.0                # gap around the board on each side
+GLASS_SIDE = 0.8         # gap between each long edge of the sheet and the side wall
+GLASS_PLAY = 0.5         # clearance between the sheet and the glue lip
+LIP = 1.2                # thickness of the glue lip, perpendicular to the sheet
+LIP_DEPTH = 3.2          # how far each lip reaches in from the side wall
 PIN_D = 3.0              # alignment pins between base and hood
 PIN_H = 3.0
 PIN_HOLE = 0.4           # extra hole diameter for the pins
 
 # --- Walls -----------------------------------------------------------------
-WALL = 4.0               # base front/back walls and hood back wall
-HOOD_WALL = 4.0          # hood side walls (must be thicker than GROOVE_DEPTH)
-FLOOR = 2.0
-PLATE = 2.0              # hood bottom plate over the screen
-LID = 2.0
+# Thin walls keep each part to about half an hour on a fast printer.
+WALL = 3.2               # base front/back walls (the alignment pins sit in them)
+HOOD_WALL = 1.2          # hood side and back walls
+FLOOR = 1.2
+FLOOR_LEDGE = 6.0        # the base floor is open except this ledge the board sits on
+PLATE = 1.0              # hood bottom plate over the screen
+LID = 1.2
 LID_LIP = 1.5
 
 # --- Cutouts ---------------------------------------------------------------
@@ -73,26 +80,41 @@ SEG = 48
 POCKET_W = BOARD_W + 2 * FIT
 POCKET_D = BOARD_D + 2 * FIT
 POCKET_H = BOARD_T + 0.3
-HOOD_INNER_W = GLASS_W + 2 * 0.3 - 2 * GROOVE_DEPTH
+# The sheet sits on a lip on each side wall, with GLASS_SIDE of room beside each edge.
+HOOD_INNER_W = GLASS_W + 2 * GLASS_SIDE
 W = max(POCKET_W + 2 * WALL, HOOD_INNER_W + 2 * HOOD_WALL)
+# Inside faces of the hood's side walls. When the sheet is narrower than the
+# board, the walls are thicker so the grooves still hold the sheet.
+HX0 = (W - HOOD_INNER_W) / 2
+HX1 = W - HX0
 D = POCKET_D + 2 * WALL
 BASE_H = FLOOR + POCKET_H
 PX0 = (W - POCKET_W) / 2
 PY0 = WALL
+# Opening matches the lit picture and hides the bezel. The plate around it
+# still lands on the board, which is what holds the board down.
+BOARD_X0 = PX0 + FIT
+BOARD_Y0 = PY0 + FIT
+WINDOW_X0 = BOARD_X0 + (BOARD_W - VISIBLE_W) / 2
+WINDOW_X1 = WINDOW_X0 + VISIBLE_W
+WINDOW_Y0 = BOARD_Y0 + (BOARD_D - VISIBLE_D) / 2
+WINDOW_Y1 = WINDOW_Y0 + VISIBLE_D
 GLASS_RISE = GLASS_L * math.sqrt(0.5)
 SLOT = GLASS_T + GLASS_PLAY
-# The sheet's bottom edge sits on the plate near the back of the screen opening
-# and its top edge leans toward the viewer. It has to lean this way: a sheet
-# leaning away would bounce the screen's light into the back wall.
-GLASS_Y1 = PY0 + POCKET_D - SCREEN_LIP - 1.0
+# Bottom edge of the sheet, toward the back. Centered on the lit picture so a
+# sheet shorter than the picture crops both ends instead of only the front.
+# The sheet leans toward the viewer: the other way would bounce light into the back wall.
+GLASS_Y1 = (WINDOW_Y0 + WINDOW_Y1) / 2 + GLASS_RISE / 2
 # Unit vector through the sheet's thickness, from its lower face to its upper face.
 SHEET_NORMAL = (0.0, math.sqrt(0.5), math.sqrt(0.5))
 HOOD_H = PLATE + GLASS_RISE + SLOT + LID_LIP + 1.0
 HOOD_Z = BASE_H                    # hood sits on the base in the assembly
 LID_Z = BASE_H + HOOD_H
 PIN_XY = [(PX0 / 2, WALL / 2), (W - PX0 / 2, WALL / 2), (PX0 / 2, D - WALL / 2), (W - PX0 / 2, D - WALL / 2)]
-assert HOOD_WALL > GROOVE_DEPTH + 1.0, "hood side walls too thin for the grooves"
-assert HOOD_INNER_W > POCKET_W - 2 * SCREEN_LIP, "sheet is too narrow to span the screen opening"
+assert HX0 >= HOOD_WALL, "hood walls would overhang the plate"
+assert WINDOW_X0 >= HX0 + LIP_DEPTH, "glue lip would cross the picture"
+assert WINDOW_X1 <= HX1 - LIP_DEPTH, "glue lip would cross the picture"
+assert WINDOW_X0 >= BOARD_X0 + 1.0 and WINDOW_Y0 >= BOARD_Y0 + 1.0, "hood plate would not hold the board"
 assert GLASS_Y1 - GLASS_RISE - SLOT > 0, "sheet would stick out of the front"
 assert GLASS_Y1 + SLOT * SHEET_NORMAL[1] < D - WALL, "sheet would hit the hood back wall"
 
@@ -184,7 +206,9 @@ def build(print_coll, cutters, ref):
     sd_right = box("SD slot right", cutters, PX0 + POCKET_W - 1, cy - SD_SLOT_W / 2, FLOOR + SD_SLOT_BOTTOM, W + 1,
                    cy + SD_SLOT_W / 2, BASE_H + 1)
     thumb = cylinder("Thumb notch", cutters, W / 2, 0, FLOOR + 3, BASE_H, 22)
-    for c in (pocket, usb, sd_left, sd_right, thumb):
+    floor_hole = box("Floor opening", cutters, PX0 + FLOOR_LEDGE, PY0 + FLOOR_LEDGE, -1, PX0 + POCKET_W - FLOOR_LEDGE,
+                     PY0 + POCKET_D - FLOOR_LEDGE, FLOOR + 1)
+    for c in (pocket, usb, sd_left, sd_right, thumb, floor_hole):
         boolean(base, c)
     for i, (x, y) in enumerate(PIN_XY):
         pin = cylinder(f"Pin {i + 1}", cutters, x, y, BASE_H - 0.5, PIN_H + 0.5, PIN_D)
@@ -192,32 +216,40 @@ def build(print_coll, cutters, ref):
 
     # Hood: frames the screen and holds the sheet at 45 degrees.
     hood = box("Hood", print_coll, 0, 0, HOOD_Z, W, D, HOOD_Z + HOOD_H, dark)
-    hollow = box("Hood hollow", cutters, HOOD_WALL, -1, HOOD_Z + PLATE, W - HOOD_WALL, D - WALL, HOOD_Z + HOOD_H + 1)
-    window = box("Screen window", cutters, PX0 + SCREEN_LIP, PY0 + SCREEN_LIP, HOOD_Z - 1,
-                 PX0 + POCKET_W - SCREEN_LIP, PY0 + POCKET_D - SCREEN_LIP, HOOD_Z + PLATE + 1)
-    # Groove: a slab tilted 45 degrees up and forward from its bottom-back edge, kept to the side walls.
+    hollow = box("Hood hollow", cutters, HX0, -1, HOOD_Z + PLATE, HX1, D - HOOD_WALL, HOOD_Z + HOOD_H + 1)
+    window = box("Screen window", cutters, WINDOW_X0, WINDOW_Y0, HOOD_Z - 1,
+                 WINDOW_X1, WINDOW_Y1, HOOD_Z + PLATE + 1)
+    # One lip on each side wall, under the sheet, so the Lexan can be glued down.
+    # A captured groove would be a second overhang and a much slower print.
     length = GLASS_L + 40
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
-    bmesh.ops.scale(bm, vec=(W + 2, length + 5, SLOT), verts=bm.verts)
-    bmesh.ops.translate(bm, vec=(0, 5 - (length + 5) / 2, SLOT / 2), verts=bm.verts)
-    groove = mesh_object("Sheet grooves", bm, cutters, (W / 2, GLASS_Y1, HOOD_Z + PLATE))
-    groove.rotation_euler = (math.radians(-45), 0, 0)
-    walls_zone = box("Groove zone (side walls only)", cutters, HOOD_WALL - GROOVE_DEPTH, -1, HOOD_Z + PLATE,
-                     W - HOOD_WALL + GROOVE_DEPTH, D + 1, HOOD_Z + HOOD_H + 1)
-    boolean(groove, walls_zone, "INTERSECT")
-    for c in (hollow, window, groove):
+    bmesh.ops.scale(bm, vec=(W + 2, length + 5, LIP), verts=bm.verts)
+    bmesh.ops.translate(bm, vec=(0, 5 - (length + 5) / 2, -LIP / 2), verts=bm.verts)
+    lip = mesh_object("Glue lip", bm, cutters, (W / 2, GLASS_Y1, HOOD_Z + PLATE))
+    lip.rotation_euler = (math.radians(-45), 0, 0)
+    zone = box("Lip zone", cutters, HX0 - 0.1, -1, HOOD_Z + PLATE - 0.1, HX1 + 0.1, D - HOOD_WALL + 0.1,
+               HOOD_Z + HOOD_H - LID_LIP - 0.5)
+    side_gap = box("Lip gap", cutters, HX0 + LIP_DEPTH, -2, HOOD_Z - 1, HX1 - LIP_DEPTH, D + 2,
+                   HOOD_Z + HOOD_H + 2)
+    boolean(lip, zone, "INTERSECT")
+    boolean(lip, side_gap)
+    # Above the plate, walls are only HOOD_WALL thick; the plate stays full size to sit on the base.
+    outside_l = box("Hood trim left", cutters, -1, -1, HOOD_Z + PLATE, HX0 - HOOD_WALL, D + 1, HOOD_Z + HOOD_H + 1)
+    outside_r = box("Hood trim right", cutters, HX1 + HOOD_WALL, -1, HOOD_Z + PLATE, W + 1, D + 1, HOOD_Z + HOOD_H + 1)
+    for c in (hollow, window, outside_l, outside_r):
         boolean(hood, c)
+    boolean(hood, lip, "UNION")
     for i, (x, y) in enumerate(PIN_XY):
         hole = cylinder(f"Pin hole {i + 1}", cutters, x, y, HOOD_Z - 1, PIN_H + 1.5, PIN_D + PIN_HOLE)
         boolean(hood, hole)
 
     # Lid: modelled in place on top of the hood, lip pointing down.
     g = 0.3
-    lid = box("Lid", print_coll, 0, 0, LID_Z, W, D, LID_Z + LID, grey)
-    rim = box("Lid rim", cutters, HOOD_WALL + g, WALL + g, LID_Z - LID_LIP, W - HOOD_WALL - g, D - WALL - g, LID_Z + 0.5)
-    rim_hole = box("Lid rim hollow", cutters, HOOD_WALL + g + 1.6, WALL + g + 1.6, LID_Z - LID_LIP - 1,
-                   W - HOOD_WALL - g - 1.6, D - WALL - g - 1.6, LID_Z + 1)
+    lid = box("Lid", print_coll, HX0 - HOOD_WALL, 0, LID_Z, HX1 + HOOD_WALL, D, LID_Z + LID, grey)
+    rim = box("Lid rim", cutters, HX0 + g, WALL + g, LID_Z - LID_LIP, HX1 - g, D - HOOD_WALL - g, LID_Z + 0.5)
+    rim_hole = box("Lid rim hollow", cutters, HX0 + g + 1.6, WALL + g + 1.6, LID_Z - LID_LIP - 1,
+                   HX1 - g - 1.6, D - HOOD_WALL - g - 1.6, LID_Z + 1)
     boolean(rim, rim_hole)
     boolean(lid, rim, "UNION")
 
@@ -342,6 +374,8 @@ def main():
     parts = build(print_coll, cutters, ref)
     base, hood, lid, board, sheet = parts
     print(f"box {W:.1f} x {D:.1f} x {BASE_H + HOOD_H + LID:.1f} mm (w x d x h)")
+    print(f"window {WINDOW_X1 - WINDOW_X0:.1f} x {WINDOW_Y1 - WINDOW_Y0:.1f} mm")
+    print(f"glass covers {GLASS_RISE:.1f} mm of the {VISIBLE_D:.1f} mm visible depth")
 
     check_fit([base, board, hood, lid, sheet])
 
@@ -349,10 +383,13 @@ def main():
     write_stl(hood, OUT / "hood.stl")
     # The lid prints flat with its lip facing up.
     write_stl(lid, OUT / "lid.stl", Matrix.Rotation(math.pi, 4, "X"))
+    for part in (base, hood, lid):
+        print(f"{part.name}: {volume(part) / 1000:.1f} cm^3 of plastic")
 
     render_preview(scene, parts, OUT / "preview.png")
     bpy.ops.wm.save_as_mainfile(filepath=str(OUT / "hologram_box.blend"))
     print("wrote hologram_box.blend")
 
 
-main()
+if __name__ == "__main__":
+    main()

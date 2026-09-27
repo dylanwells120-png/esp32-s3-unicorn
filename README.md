@@ -54,13 +54,19 @@ Build the firmware file first with `arduino-cli compile --export-binaries`. Flas
 
 ## Hologram box
 
-`enclosure/` holds a 3D-printable Pepper's ghost box. The screen faces up in the base, and a 4 × 2¾ in polycarbonate sheet sits at 45° above it. Print `base.stl`, `hood.stl` and `lid.stl` in black; none of them need supports. To change sizes, edit the numbers at the top of `enclosure/hologram_box_blender.py`, then run:
+`enclosure/` holds a 3D-printable Pepper's ghost box plus a tall arcade cabinet the box docks into. The screen faces up in the box, and a 4 × 2¾ in polycarbonate sheet sits at 45° above it.
+
+- **Box:** `base.stl`, `hood.stl`, `lid.stl` from `enclosure/hologram_box_blender.py`. Use the lid when the box sits on a desk.
+- **Arcade cabinet:** `arcade_cabinet.stl` and `arcade_marquee.stl` from `enclosure/hologram_arcade_blender.py`. Leave the box lid off, slide the assembled base + hood in from the back, then drop the marquee on. The marquee's rear flap locks the box. USB stays open at the back; the sides have SD-card slots.
+
+Print in black; none of the parts need supports. To change sizes, edit the numbers at the top of the script, then run:
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_box_blender.py
+/Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_arcade_blender.py
 ```
 
-`enclosure/hologram_box.blend` has every cutout as a live Boolean modifier, so you can also adjust it by hand.
+`enclosure/hologram_box.blend` and `enclosure/hologram_arcade.blend` have every cutout as a live Boolean modifier, so you can also adjust them by hand.
 
 The sheet leans toward you: its bottom edge is at the back, and its top edge is up at the front. The screen's light bounces off its underside toward you, and the animal appears standing at the back of the box.
 
