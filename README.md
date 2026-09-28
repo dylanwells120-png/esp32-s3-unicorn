@@ -29,12 +29,20 @@ The board also hosts a web page that sends any video to the screen over Wi-Fi.
 
 **400 × 240** mode sends smaller frames that the board scales up, which gives a higher frame rate.
 
+## iPhone app
+
+`ios/UnicornDisplay.xcodeproj` is the phone app. It runs the same animals, wildlife, NES, and video screens on the phone and sends each frame to the board. Open the project in Xcode, pick your phone, and run it. The phone has to be on the same Wi-Fi as the board.
+
+The first screen asks for the board address. On the board's own network **Unicorn-Display** that is `192.168.4.1`. On your network it is `unicorn.local`, or the address printed in the serial log. Allow local network access when iOS asks.
+
+The screens are the files in `web/`. The app serves them on the phone and forwards `/frame`, `/settings`, and the other board routes to that address. The board still runs the firmware. The page on the SD card is the same screens, for a browser.
+
 ## SD card
 
 The 3D models and the web app load from a microSD card, not from flash. The card holds:
 
 - `/unicorn/animals.bin` and `/unicorn/animals_lite.bin`: the full and lite models, built by `tools/build_mesh.py` into `sd/unicorn/`.
-- `/unicorn/index.html`: the web app (source in `sd/unicorn/`).
+- `/unicorn/index.html`: the web app. Edit the files in `web/`, then run `python3 tools/build_page.py` to pack `sd/unicorn/index.html` and `page_blob.h`.
 - `/unicorn/firmware.bin`: optional. If it's there, the board installs it on the next boot, then renames it `firmware.done`.
 
 Copy files over Wi-Fi from the board's **SD card** page (`/setup`, built into the firmware so it works with an empty card), or use the script:
@@ -54,21 +62,21 @@ Build the firmware file first with `arduino-cli compile --export-binaries`. Flas
 
 ## Hologram box
 
-`enclosure/` holds a 3D-printable Pepper's ghost box plus a tall arcade cabinet the box docks into. The screen faces up in the box, and a 4 × 2¾ in polycarbonate sheet sits at 45° above it.
+`enclosure/` holds a two-piece Pepper's ghost and a lightweight table it sits on. The screen sits in the lid, glass down, and a 4 × 2¾ in polycarbonate sheet lies at 45° on rails inside the hood.
 
-- **Box:** `base.stl`, `hood.stl`, `lid.stl` from `enclosure/hologram_box_blender.py`. Use the lid when the box sits on a desk.
-- **Arcade cabinet:** `arcade_cabinet.stl` and `arcade_marquee.stl` from `enclosure/hologram_arcade_blender.py`. Leave the box lid off, slide the assembled base + hood in from the back, then drop the marquee on. The marquee's rear flap locks the box. USB stays open at the back; the sides have SD-card slots.
+- **Hologram:** `hood.stl` and `lid.stl` from `enclosure/hologram_box_blender.py`. Lay the sheet on the two rails, low edge toward the front. Drop the board into the lid, glass down, USB edge toward the back, and set the lid on the pins.
+- **Table:** `stand.stl` from `enclosure/hologram_stand_blender.py`. Four legs and an open top. Set the hood in the recess.
 
-Print in black; none of the parts need supports. To change sizes, edit the numbers at the top of the script, then run:
+Print in black. The hood prints upright, the lid prints with the window on the bed, and the stand prints with the tabletop on the bed and the legs up. None of them need supports. To change sizes, edit the numbers at the top of the script, then run:
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_box_blender.py
-/Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_arcade_blender.py
+/Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_stand_blender.py
 ```
 
-`enclosure/hologram_box.blend` and `enclosure/hologram_arcade.blend` have every cutout as a live Boolean modifier, so you can also adjust them by hand.
+`enclosure/hologram_box.blend` and `enclosure/hologram_stand.blend` have every cutout as a live Boolean modifier, so you can also adjust them by hand.
 
-The sheet leans toward you: its bottom edge is at the back, and its top edge is up at the front. The screen's light bounces off its underside toward you, and the animal appears standing at the back of the box.
+The sheet's low edge is at the front and its high edge leans back. Light from the screen hits the top of the sheet and bounces out the open front.
 
 When the board is in the box, turn on **Hologram mode**, either on the web app or with `python3 tools/sd_upload.py --port /dev/cu.usbmodem1101 --hologram on`. It mirrors the picture to undo the reflection, hides the on-screen buttons, and skips the start screen. The setting survives restarts. If the animal appears upside down, press **Rotate 180°** (or use `--hologram rotate`). Videos streamed from the web app are mirrored the same way. In hologram mode, **Magic effects** (on by default; switch on the web app, or `--magic on|off`) add glowing comets with trails, sparkles and a spinning ring of light on the floor, themed per animal: rainbow orbits for the unicorn, fox fire, falling snow for the penguin, bubbles for the turtle, fireflies and stars for the owl. Themes are in `magic_fx.h`.
 

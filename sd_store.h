@@ -3,7 +3,7 @@
 //
 // Card layout (see sd/unicorn/ in the repo):
 //   /unicorn/animals.bin   meshes written by tools/build_mesh.py
-//   /unicorn/index.html    the web app served at "/"
+//   /unicorn/index.html    the web app served at "/" (packed from web/ by tools/build_page.py) (packed from web/ by tools/build_page.py)
 //   /unicorn/firmware.bin  installed on the next boot, then renamed firmware.done
 
 #include <SD.h>

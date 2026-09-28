@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unicorn Display</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main>
+  <header><h1>Unicorn Display</h1><a href="/setup">SD card</a></header>
+
+  <h2>Hologram box</h2>
+  <p class="sub">Turn this on when the board is in the Pepper's ghost box. The picture is mirrored to undo the reflection, and the on-screen buttons are hidden. If the animal looks upside down, press Rotate 180°. Magic effects add glowing comets, sparkles and a ring of light, themed for each animal.</p>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="holo"> Hologram mode</label>
+    <label class="switch"><input type="checkbox" id="magic"> Magic effects</label>
+    <label class="switch"><input type="checkbox" id="half"> Half resolution (60 fps)</label>
+    <label class="switch"><input type="checkbox" id="lite"> Lite models</label>
+    <button class="main stop" id="mirror" type="button">Mirror</button>
+    <button class="main stop" id="upside" type="button">Upside down</button>
+    <button class="main stop" id="rotate" type="button">Rotate 180°</button>
+    <span class="stats" id="holoMsg"></span>
+  </div>
+
+  <h2>3D animals</h2>
+  <p class="sub">The models from the SD card, drawn the same way the board draws them. Drag to spin one.</p>
+  <div id="stage"><canvas id="view" width="800" height="480"></canvas><div class="note" id="viewNote">Loading models…</div></div>
+  <div class="chips" id="chips"></div>
+  <div class="row"><button class="main" id="show" disabled>Show on display</button><span class="stats" id="showMsg"></span></div>
+
+  <h2>Wildlife</h2>
+  <p class="sub">Butterflies, deer, birds, and rabbits on a black field, the same way they appear in the box. Send the scene to the display, or leave it playing here.</p>
+  <div id="wildStage"><canvas id="wild" width="800" height="480"></canvas></div>
+  <div class="chips" id="wildChips"></div>
+  <div class="row">
+    <button class="main" id="wildGo">Send wildlife to display</button>
+    <button class="main stop" id="wildStop" disabled>Stop</button>
+    <span class="stats" id="wildMsg"></span>
+  </div>
+
+  <h2>Fairies and gnomes</h2>
+  <p class="sub">Fairies and garden gnomes in a moonlit garden. Send the scene to the display, or leave it playing here.</p>
+  <div id="gardenStage"><canvas id="garden" width="800" height="480"></canvas></div>
+  <div class="chips" id="gardenChips"></div>
+  <div class="row">
+    <button class="main" id="gardenGo">Send garden to display</button>
+    <button class="main stop" id="gardenStop" disabled>Stop</button>
+    <span class="stats" id="gardenMsg"></span>
+  </div>
+
+  <h2>NES</h2>
+  <p class="sub">Pick a <b>.nes</b> ROM on this phone or computer. The game runs here, and Send to display puts the picture on the panel. Pad or keyboard: arrows, Z is B, X is A, Enter is Start, Shift is Select.</p>
+  <div id="nesStage"><canvas id="nesView" width="256" height="240"></canvas></div>
+  <p class="sub" id="nesNote">No ROM loaded. Castlevania is in NES ROMs on this Mac — choose that file.</p>
+  <div id="controller">
+    <div class="cross">
+      <button data-bit="4" class="up">▲</button>
+      <button data-bit="6" class="left">◀</button>
+      <div class="hub"></div>
+      <button data-bit="7" class="right">▶</button>
+      <button data-bit="5" class="down">▼</button>
+    </div>
+    <div class="center">
+      <button data-bit="2">Select</button>
+      <button data-bit="3">Start</button>
+    </div>
+    <div class="ab">
+      <button data-bit="1" class="b">B</button>
+      <button data-bit="0" class="a">A</button>
+    </div>
+    <button type="button" id="controllerClose">Close</button>
+  </div>
+  <div class="row">
+    <button class="main" id="nesPick">Choose a ROM</button>
+    <input id="nesFile" type="file" accept=".nes" hidden>
+    <button class="main" id="nesGo" disabled>Send to display</button>
+    <button class="main stop" id="nesPad" type="button">Controller</button>
+    <button class="main stop" id="nesStop" disabled>Stop</button>
+    <span class="stats" id="nesMsg"></span>
+  </div>
+
+  <h2>Stream a video</h2>
+  <p class="sub">Play a video here and it shows up on the screen. Stop, and the animals come back.</p>
+  <div id="drop"><b>Choose a video</b> or drop one here<input id="file" type="file" accept="video/*" hidden></div>
+  <video id="video" controls loop muted playsinline></video>
+  <div class="row">
+    <button class="main" id="go" disabled>Send to display</button>
+    <button class="main stop" id="stop" disabled>Stop</button>
+  </div>
+  <div class="row">
+    <label>Fit <select id="fit"><option value="cover">Fill screen (crop)</option><option value="contain">Whole frame (bars)</option></select></label>
+    <label>Resolution <select id="res"><option value="1">800 × 480</option><option value="2">400 × 240 (faster)</option></select></label>
+    <label>Quality <input id="quality" type="range" min="0.3" max="0.9" step="0.05" value="0.6"></label>
+  </div>
+  <div class="stats" id="stats"></div>
+</main>
+<canvas id="canvas" hidden></canvas>
+<script src="vendor/jsnes.min.js"></script>
+<script src="js/hologram.js"></script>
+<script src="js/viewer.js"></script>
+<script src="js/wildlife.js"></script>
+<script src="js/garden.js"></script>
+<script src="js/nes.js"></script>
+<script src="js/video.js"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
-"""Tall upright arcade cabinet that the existing hologram box slides into.
+"""Short bartop the existing hologram box slides into.
 
 The rectangular case from hologram_box_blender.py is unchanged. This cabinet
-is a dock: slide the assembled base + hood in from the back (leave the box lid
-off). The marquee drops on top and a rear flap traps the box.
+is a dock: slide the assembled box in from the back, lid on. The screen
+is in that lid. The marquee drops on top and a rear flap traps the box.
 
 Run from the repo root:
     /Applications/Blender.app/Contents/MacOS/Blender -b -P enclosure/hologram_arcade_blender.py
@@ -28,45 +28,42 @@ OUT = Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT))
 import hologram_box_blender as holo  # noqa: E402
 
-# Outer size of the printed box (base + hood). Leave the box lid off when docking.
+# Outer size of the printed box, lid included. The screen is in the lid.
 BOX_W = holo.W
 BOX_D = holo.D
-BOX_H = holo.BASE_H + holo.HOOD_H
+BOX_H = holo.BASE_H + holo.HOOD_H + holo.LID_H
 BOX_VIEW_X0 = holo.HX0
 BOX_VIEW_X1 = holo.HX1
 BOX_VIEW_Z0 = holo.BASE_H + holo.PLATE
 BOX_VIEW_Z1 = holo.BASE_H + holo.HOOD_H
 BOX_SD_Y = holo.PY0 + holo.POCKET_D / 2
 BOX_SD_W = holo.SD_SLOT_W
-BOX_SD_Z0 = holo.FLOOR + holo.SD_SLOT_BOTTOM
-BOX_SD_Z1 = holo.BASE_H
+BOX_SD_Z0 = holo.LID_Z + holo.LID_PLATE + holo.SD_SLOT_BOTTOM
+BOX_SD_Z1 = holo.LID_Z + holo.LID_H
 
 # --- Dock fit --------------------------------------------------------------
 PLAY = 0.8               # clearance around the box on left/right
 BACK_PLAY = 2.4          # room behind the box for the marquee lock flap
-SIDE = 2.8               # cabinet side walls
-BEZEL = 2.8              # front monitor frame
-SHELF = 2.8              # plate the box sits on
-FLOOR = 1.6
-WALL = 2.4               # lower-body walls
+SIDE = 1.6               # cabinet side walls
+BEZEL = 1.6              # front monitor frame
+SHELF = 1.6              # plate the box sits on
+FLOOR = 1.2
+WALL = 1.6               # shell walls
 RIB = 1.6
 
-# --- Tall upright proportions ----------------------------------------------
-# Lower body is the height that makes it stand like a real cab, not a bartop.
-LOWER_H = 155.0
-PANEL_D = 48.0           # control deck, in front of the box
-PANEL_DROP = 16.0        # deck slants down toward the player
-MARQUEE_H = 24.0
+# --- Short shell ------------------------------------------------------------
+# A tall pedestal is almost all of the print time. This is only tall enough
+# for the slanted deck and the shelf the box sits on.
+LOWER_H = 18.0
+PANEL_D = 42.0           # control deck, in front of the box
+PANEL_DROP = 6.0         # deck slants down toward the player
+MARQUEE_H = 16.0
 MARQUEE_OVER = 14.0
 MARQUEE_DEPTH = 28.0
 MARQUEE_SLANT = 12.0
 MARQUEE_WALL = 1.2
 MARQUEE_LIP = 3.0
-FLAP_H = 18.0            # rear flap that locks the box once the marquee is on
-COIN_W = 36.0
-COIN_H = 48.0
-COIN_INSET = 2.4
-SPEAKER_W = 14.0
+FLAP_H = 14.0            # rear flap that locks the box once the marquee is on
 
 SEG = 48
 
@@ -91,7 +88,7 @@ VIEW_X1 = BOX_X0 + BOX_VIEW_X1 - 1.0
 VIEW_Z0 = BOX_Z0 + BOX_VIEW_Z0 + 1.0
 VIEW_Z1 = BOX_Z0 + BOX_VIEW_Z1 - 2.0
 
-assert Z_PANEL_FRONT > FLOOR + 20.0, "lower body is too short for a coin door"
+assert Z_PANEL_FRONT > FLOOR + 4.0, "control deck would cut through the floor"
 assert VIEW_Z1 - VIEW_Z0 > 30.0, "monitor window would hide the hologram"
 
 
@@ -219,13 +216,7 @@ def build(print_coll, cutters, ref):
         box("Lower hollow back", cutters, WALL, PANEL_D + (CAB_D - PANEL_D) / 2 + RIB / 2, FLOOR,
             CAB_W - WALL, CAB_D - WALL, SHELF_Z - 0.05),
     ]
-    floor_hole = box("Floor opening", cutters, WALL + 8, WALL + 8, -1, CAB_W - WALL - 8, CAB_D - WALL - 8, FLOOR + 1)
-    coin = box("Coin door", cutters, (CAB_W - COIN_W) / 2, -1, 18.0,
-               (CAB_W + COIN_W) / 2, COIN_INSET, 18.0 + COIN_H)
-    coin_slot = box("Coin slot", cutters, CAB_W / 2 - 1.4, -1, 18.0 + COIN_H + 3.0,
-                    CAB_W / 2 + 1.4, WALL + 0.2, 18.0 + COIN_H + 8.0)
-    vent = box("Vent", cutters, (CAB_W - 44) / 2, -1, 18.0 + COIN_H + 14.0,
-               (CAB_W + 44) / 2, 0.8, 18.0 + COIN_H + 28.0)
+    floor_hole = box("Floor opening", cutters, WALL + 6, WALL + 6, -1, CAB_W - WALL - 6, CAB_D - WALL - 6, FLOOR + 1)
 
     sd_y = BOX_Y0 + BOX_SD_Y
     sd_l = box("SD access L", cutters, -1, sd_y - BOX_SD_W / 2, BOX_Z0 + BOX_SD_Z0,
@@ -233,15 +224,8 @@ def build(print_coll, cutters, ref):
     sd_r = box("SD access R", cutters, CAB_W - SIDE - 1, sd_y - BOX_SD_W / 2, BOX_Z0 + BOX_SD_Z0,
                CAB_W + 1, sd_y + BOX_SD_W / 2, BOX_Z0 + BOX_SD_Z1)
 
-    for c in [above, bay, view, *hollows, floor_hole, coin, coin_slot, vent, sd_l, sd_r]:
+    for c in [above, bay, view, *hollows, floor_hole, sd_l, sd_r]:
         boolean(cab, c)
-
-    grill_z = 18.0 + COIN_H + 32.0
-    for i, x0 in enumerate((CAB_W * 0.18, CAB_W * 0.50 - SPEAKER_W / 2, CAB_W * 0.82 - SPEAKER_W)):
-        for j in range(4):
-            slat = box(f"Speaker {i + 1}{j + 1}", cutters, x0, -1, grill_z + j * 3.2,
-                       x0 + SPEAKER_W, 1.0, grill_z + j * 3.2 + 1.5)
-            boolean(cab, slat)
 
     jx, jy = CAB_W * 0.30, PANEL_D * 0.58
     stick = cone("Joystick", cutters, jx, jy, panel_z(jy) - 0.4, 7.0, 9.5, 4.4, red)

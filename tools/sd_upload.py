@@ -19,6 +19,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD_PAGE = ROOT / "tools" / "build_page.py"
 TARGETS = {
     "models": ("animals.bin", ROOT / "sd" / "unicorn" / "animals.bin"),
     "lite": ("animals_lite.bin", ROOT / "sd" / "unicorn" / "animals_lite.bin"),
@@ -210,6 +211,10 @@ def main():
         return
     if not args.targets and not args.restart:
         args.targets = ["models", "lite", "page"]
+    if "page" in args.targets:
+        import subprocess
+
+        subprocess.run([sys.executable, str(BUILD_PAGE)], check=True, cwd=ROOT)
     for target in args.targets:
         if target not in TARGETS:
             ap.error(f"unknown target {target!r}; choose from {', '.join(TARGETS)}")

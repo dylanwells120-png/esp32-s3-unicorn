@@ -1,5 +1,9 @@
 .DS_Store
+__pycache__/
 build/
+xcuserdata/
+*.xcuserstate
+DerivedData/
 *.bin
 *.elf
 wifi_secrets.h
